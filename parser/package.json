@@ -1,0 +1,22 @@
+{
+    "name": "grammarly",
+    "version": "1.0.0",
+    "main": "index.js",
+    "type": "module",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "start": "node parser.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "",
+    "dependencies": {
+        "@google/generative-ai": "^0.21.0",
+        "dotenv": "^16.4.5",
+        "json2csv": "^6.0.0-alpha.2",
+        "node-fetch": "^3.3.2",
+        "sqlite3": "^5.1.7",
+        "xml2js": "^0.6.2"
+    }
+}

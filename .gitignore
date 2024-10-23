@@ -1,0 +1,4 @@
+node_modules/
+books/
+sentences.db
+.env
