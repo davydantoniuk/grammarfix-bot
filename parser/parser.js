@@ -32,18 +32,18 @@ async function make_errors(api, prompt, batch) {
         items: {
             type: SchemaType.OBJECT,
             properties: {
-                inputSentence: {
+                original: {
                     type: SchemaType.STRING,
                     description: "input sentences from prompt",
                     nullable: false,
                 },
-                sentencesWithErrors: {
+                altered: {
                     type: SchemaType.STRING,
                     description: "sentences with errors",
                     nullable: false,
                 },
             },
-            required: ["inputSentence", "sentencesWithErrors"],
+            required: ["original", "altered"],
         },
     };
     const model = genAI.getGenerativeModel({
@@ -63,7 +63,7 @@ async function writeResultsToDatabase(data, bookId, lastProcessedSentence) {
     for (let i = 0; i < data.length; i++) {
         await db.all(
             "INSERT INTO sentences (original, altered, book_id) VALUES (?, ?, ?)",
-            [data[i].inputSentence, data[i].sentencesWithErrors, bookId]
+            [data[i].original, data[i].altered, bookId]
         );
     }
     await db.all(
@@ -75,7 +75,6 @@ async function writeResultsToDatabase(data, bookId, lastProcessedSentence) {
 
 async function main() {
     const GEMINI_API = process.env.GEMINI_API_KEY;
-    console.log("API key:", GEMINI_API);
     const prompt = `Introduce 3-4 natural mistakes into the following sentences for model training.
         Format:
         Provide the output as an array.
@@ -93,7 +92,8 @@ async function main() {
         Wrong word usage
         Punctuation errors
         Capitalization errors
-
+        
+        it is advisable to change the order of some words/phrases and put irregular endings for phrasal verbs
         Example format:
             "{Original sentence1}.";"{Altered sentence1 with mistakes.}";"{Original sentence2}.";"{Altered sentence2 with mistakes.}";...";
 
@@ -133,9 +133,8 @@ async function main() {
         }
         const bookPath = `./books/${bookName}`;
 
-        const batchSize = 10;
+        const batchSize = 100;
         const sentences = parseTextFiles([bookPath], lastProcessedSentence);
-        console.log(lastProcessedSentence);
         const totalSentences = sentences.length;
         for (let j = 0; j < totalSentences; j += batchSize) {
             const batch = sentences.slice(j, j + batchSize);
@@ -149,7 +148,7 @@ async function main() {
                 `Processed ${Math.min(
                     j + batchSize,
                     totalSentences
-                )} out of ${totalSentences} sentences`
+                )} out of ${totalSentences} sentences in ${bookName}`
             );
         }
         lastProcessedSentence = 0;
