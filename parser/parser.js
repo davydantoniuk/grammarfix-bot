@@ -60,17 +60,21 @@ async function make_errors(api, prompt, batch) {
 }
 
 async function writeResultsToDatabase(data, bookId, lastProcessedSentence) {
-    for (let i = 0; i < data.length; i++) {
+    try {
+        for (let i = 0; i < data.length; i++) {
+            await db.all(
+                "INSERT INTO sentences (original, altered, book_id) VALUES (?, ?, ?)",
+                [data[i].original, data[i].altered, bookId]
+            );
+        }
         await db.all(
-            "INSERT INTO sentences (original, altered, book_id) VALUES (?, ?, ?)",
-            [data[i].original, data[i].altered, bookId]
+            `UPDATE last_state SET last_processed_sentence = ?, last_processed_book = ?`,
+            [lastProcessedSentence, bookId]
         );
+        console.log("Data inserted into the database!");
+    } catch (error) {
+        console.error(`${new Date()} Error writing to database`);
     }
-    await db.all(
-        `UPDATE last_state SET last_processed_sentence = ?, last_processed_book = ?`,
-        [lastProcessedSentence, bookId]
-    );
-    console.log("Data inserted into the database!");
 }
 
 async function main() {
@@ -93,30 +97,46 @@ async function main() {
         Punctuation errors
         Capitalization errors
         
-        it is advisable to change the order of some words/phrases and put irregular endings for phrasal verbs
+        it is advisable to change to wrong order of some words/phrases and put wrong endings for phrasal verbs
         Example format:
             "{Original sentence1}.";"{Altered sentence1 with mistakes.}";"{Original sentence2}.";"{Altered sentence2 with mistakes.}";...";
 
 
         Make sure this structure is followed for every! input sentence. write in plain text format. mandatory! make at least 3! errors! in each and every sentence!\n`;
-
     const bookFiles = fs
         .readdirSync("./books")
-        .filter((file) => file.endsWith(".txt"));
-    const lastState = await db.all(
-        "SELECT last_processed_book, last_processed_sentence FROM last_state"
-    );
+        .filter((file) => file.endsWith(".txt"))
+        .map((file) => ({
+            name: file,
+            time: fs.statSync(`./books/${file}`).mtime.getTime(),
+        }))
+        .sort((a, b) => a.time - b.time)
+        .map((file) => file.name);
+    let lastState;
+    try {
+        lastState = await db.all(
+            "SELECT last_processed_book, last_processed_sentence FROM last_state"
+        );
+    } catch (error) {
+        console.error(`${new Date()} Error reading last state from database`);
+        return;
+    }
     let lastProcessedBook = 0;
     let lastProcessedSentence = 0;
     if (lastState.length === 0) {
-        await db.all(
-            "INSERT INTO last_state (last_processed_sentence, last_processed_book) VALUES (?, ?)",
-            [0, 0]
-        );
-        await db.all(
-            "INSERT INTO books (name) VALUES (?)",
-            bookFiles[0].split(".")[0]
-        );
+        try {
+            await db.all(
+                "INSERT INTO last_state (last_processed_sentence, last_processed_book) VALUES (?, ?)",
+                [0, 0]
+            );
+            await db.all(
+                "INSERT INTO books (name) VALUES (?)",
+                bookFiles[0].split(".")[0]
+            );
+        } catch (error) {
+            console.error(`$${new Date()} Error initializing database state`);
+            return;
+        }
     } else {
         lastProcessedBook = lastState[lastState.length - 1].last_processed_book;
         lastProcessedSentence =
@@ -126,10 +146,17 @@ async function main() {
     for (let bookId = lastProcessedBook; bookId < bookFiles.length; bookId++) {
         const bookName = bookFiles[bookId];
         if (bookId !== lastProcessedBook) {
-            await db.all(
-                "INSERT INTO books (name) VALUES (?)",
-                bookName.split(".")[0]
-            );
+            try {
+                await db.all(
+                    "INSERT INTO books (name) VALUES (?)",
+                    bookName.split(".")[0]
+                );
+            } catch (error) {
+                console.error(
+                    `${new Date()} Error inserting book into database`
+                );
+                continue;
+            }
         }
         const bookPath = `./books/${bookName}`;
 
@@ -138,7 +165,16 @@ async function main() {
         const totalSentences = sentences.length;
         for (let j = 0; j < totalSentences; j += batchSize) {
             const batch = sentences.slice(j, j + batchSize);
-            const result = await make_errors(GEMINI_API, prompt, batch);
+            let result;
+            try {
+                result = await make_errors(GEMINI_API, prompt, batch);
+            } catch (error) {
+                console.error(
+                    `${new Date()} Error generating errors with Google AI`
+                );
+                await new Promise((resolve) => setTimeout(resolve, 30000));
+                continue;
+            }
             await writeResultsToDatabase(
                 result,
                 bookId,
