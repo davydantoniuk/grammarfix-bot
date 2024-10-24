@@ -4,28 +4,27 @@ import db from "./data/database.js";
 import dotenv from "dotenv";
 dotenv.config();
 
-function parseTextFiles(filePaths) {
-    const sentances = [];
+function parseTextFiles(filePaths, lastProcessedSentence) {
+    const sentences = [];
     for (let i = 0; i < filePaths.length; i++) {
         let data = fs.readFileSync(filePaths[i], "utf8");
         data = data.replace(/[\r\n;]+/g, " ");
-        const sentences = data.split(". ");
-        sentences.forEach((sentence) => {
-            sentence = sentence.trim();
-
-            if (
-                sentence.length < 30 ||
-                sentence.length > 150 ||
-                sentence.includes("_")
-            )
-                return;
-            sentances.push(sentence);
+        const allSentences = data.split(". ").filter((sentence) => {
+            return (
+                sentence.length > 30 &&
+                sentence.length < 150 &&
+                !sentence.includes("_")
+            );
         });
+        for (let j = lastProcessedSentence; j < allSentences.length; j++) {
+            let sentence = allSentences[j].trim();
+            sentences.push(sentence);
+        }
     }
-    return sentances;
+    return sentences;
 }
 
-async function make_errors(api, prompt, sentences) {
+async function make_errors(api, prompt, batch) {
     const genAI = new GoogleGenerativeAI(api);
     const schema = {
         description: "sentences",
@@ -33,18 +32,18 @@ async function make_errors(api, prompt, sentences) {
         items: {
             type: SchemaType.OBJECT,
             properties: {
-                inputSentance: {
+                inputSentence: {
                     type: SchemaType.STRING,
-                    description: "input sentances from prompt",
+                    description: "input sentences from prompt",
                     nullable: false,
                 },
-                sentancesWithErrors: {
+                sentencesWithErrors: {
                     type: SchemaType.STRING,
-                    description: "sentances with errors",
+                    description: "sentences with errors",
                     nullable: false,
                 },
             },
-            required: ["inputSentance", "sentancesWithErrors"],
+            required: ["inputSentence", "sentencesWithErrors"],
         },
     };
     const model = genAI.getGenerativeModel({
@@ -55,41 +54,28 @@ async function make_errors(api, prompt, sentences) {
         },
     });
 
-    const result = [];
-    const batchSize = 100;
-    const totalSentences = 121; //sentances.length()
-    for (let i = 0; i < totalSentences; i += batchSize) {
-        const batch = sentences.slice(i, i + batchSize);
-        const response = await model.generateContent(prompt + batch);
+    const response = await model.generateContent(prompt + batch);
+    const data = JSON.parse(response.response.text());
+    return data;
+}
 
-        const data = JSON.parse(response.response.text());
-
-        result.push(...data);
-        console.log(
-            `Processed ${Math.min(
-                i + batchSize,
-                totalSentences
-            )} out of ${totalSentences} sentences`
+async function writeResultsToDatabase(data, bookId, lastProcessedSentence) {
+    for (let i = 0; i < data.length; i++) {
+        await db.all(
+            "INSERT INTO sentences (original, altered, book_id) VALUES (?, ?, ?)",
+            [data[i].inputSentence, data[i].sentencesWithErrors, bookId]
         );
     }
-    return result;
-}
-
-function writeResultsToDatabase(data) {
-    const insertStmt = db.prepare(
-        `INSERT INTO sentences (original, altered) VALUES (?, ?)`
+    await db.all(
+        `UPDATE last_state SET last_processed_sentence = ?, last_processed_book = ?`,
+        [lastProcessedSentence, bookId]
     );
-
-    data.forEach((item) => {
-        insertStmt.run(item.inputSentance, item.sentancesWithErrors);
-    });
-
-    insertStmt.finalize();
     console.log("Data inserted into the database!");
 }
+
 async function main() {
     const GEMINI_API = process.env.GEMINI_API_KEY;
-    console.log(GEMINI_API);
+    console.log("API key:", GEMINI_API);
     const prompt = `Introduce 3-4 natural mistakes into the following sentences for model training.
         Format:
         Provide the output as an array.
@@ -108,18 +94,66 @@ async function main() {
         Punctuation errors
         Capitalization errors
 
-
-        
         Example format:
             "{Original sentence1}.";"{Altered sentence1 with mistakes.}";"{Original sentence2}.";"{Altered sentence2 with mistakes.}";...";
 
 
         Make sure this structure is followed for every! input sentence. write in plain text format. mandatory! make at least 3! errors! in each and every sentence!\n`;
 
-    const books_pathes = ["./books/book1.txt"];
+    const bookFiles = fs
+        .readdirSync("./books")
+        .filter((file) => file.endsWith(".txt"));
+    const lastState = await db.all(
+        "SELECT last_processed_book, last_processed_sentence FROM last_state"
+    );
+    let lastProcessedBook = 0;
+    let lastProcessedSentence = 0;
+    if (lastState.length === 0) {
+        await db.all(
+            "INSERT INTO last_state (last_processed_sentence, last_processed_book) VALUES (?, ?)",
+            [0, 0]
+        );
+        await db.all(
+            "INSERT INTO books (name) VALUES (?)",
+            bookFiles[0].split(".")[0]
+        );
+    } else {
+        lastProcessedBook = lastState[lastState.length - 1].last_processed_book;
+        lastProcessedSentence =
+            lastState[lastState.length - 1].last_processed_sentence;
+    }
 
-    const sentances = parseTextFiles(books_pathes);
-    const result = await make_errors(GEMINI_API, prompt, sentances);
-    writeResultsToDatabase(result);
+    for (let bookId = lastProcessedBook; bookId < bookFiles.length; bookId++) {
+        const bookName = bookFiles[bookId];
+        if (bookId !== lastProcessedBook) {
+            await db.all(
+                "INSERT INTO books (name) VALUES (?)",
+                bookName.split(".")[0]
+            );
+        }
+        const bookPath = `./books/${bookName}`;
+
+        const batchSize = 10;
+        const sentences = parseTextFiles([bookPath], lastProcessedSentence);
+        console.log(lastProcessedSentence);
+        const totalSentences = sentences.length;
+        for (let j = 0; j < totalSentences; j += batchSize) {
+            const batch = sentences.slice(j, j + batchSize);
+            const result = await make_errors(GEMINI_API, prompt, batch);
+            await writeResultsToDatabase(
+                result,
+                bookId,
+                lastProcessedSentence + j + batchSize
+            );
+            console.log(
+                `Processed ${Math.min(
+                    j + batchSize,
+                    totalSentences
+                )} out of ${totalSentences} sentences`
+            );
+        }
+        lastProcessedSentence = 0;
+    }
 }
+
 main();
