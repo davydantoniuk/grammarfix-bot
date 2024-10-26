@@ -47,7 +47,7 @@ async function make_errors(api, prompt, batch) {
         },
     };
     const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash-002",
+        model: "gemini-1.5-flash-002", //gemini-1.5-pro
         generationConfig: {
             responseMimeType: "application/json",
             responseSchema: schema,
@@ -88,17 +88,19 @@ async function writeResultsToDatabase(data, bookId, lastProcessedSentence) {
 // }
 
 async function main() {
+    const batchSize = 20; //number of sentences in prompt
+
     const GEMINI_API = process.env.GEMINI_API_KEY;
     const prompts = [
-        "Make the following request with the all 20 sentences.  Make 3-4 natural mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 3-4 spelling mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 3-4 grammatical mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 2-3 spelling mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 2-3 grammatical mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 5-6 grammatical mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 4-5 natural mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 4-5 spelling mistakes into the following 20 sentences for model training. .",
-        "Make the following request with the all 20 sentences.  Make 4-5 grammatical mistakes into the following 20 sentences for model training. ."
+        `Make the following request with the all ${batchSize} sentences.  Make 3-4 natural mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 3-4 spelling mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 3-4 grammatical mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 2-3 spelling mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 2-3 grammatical mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 5-6 grammatical mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 4-5 natural mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 4-5 spelling mistakes into the following ${batchSize} sentences for model training. .`,
+        `Make the following request with the all ${batchSize} sentences.  Make 4-5 grammatical mistakes into the following ${batchSize} sentences for model training. .`
       ];
     const bookFiles = fs
         .readdirSync("./books")
@@ -157,7 +159,6 @@ async function main() {
         }
         const bookPath = `./books/${bookName}`;
 
-        const batchSize = 20; //number of sentences in prompt
         const sentences = parseTextFiles([bookPath], lastProcessedSentence);
         const totalSentences = sentences.length;
         for (let j = 0; j < totalSentences; j += batchSize) {
@@ -167,7 +168,7 @@ async function main() {
 
             let result;
             try {
-                result = await make_errors(GEMINI_API, randomPrompt, batch); /////////
+                result = await make_errors(GEMINI_API, randomPrompt, batch);
                 
             } catch (error) {
                 console.error(
