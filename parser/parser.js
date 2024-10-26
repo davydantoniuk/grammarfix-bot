@@ -60,6 +60,7 @@ async function make_errors(api, prompt, batch) {
 }
 
 async function writeResultsToDatabase(data, bookId, lastProcessedSentence) {
+    console.log(`${data.length} - Numbers of sentences to db`)
     try {
         for (let i = 0; i < data.length; i++) {
             await db.all(
@@ -76,33 +77,29 @@ async function writeResultsToDatabase(data, bookId, lastProcessedSentence) {
         console.error(`${new Date()} Error writing to database`);
     }
 }
+////The total number of sentences in the database
+// async function getDatabaseLength() {
+//     try {
+//         const count = await db.get("SELECT COUNT(*) as count FROM sentences");
+//         console.log(`Total sentences in database: ${count.count}`);
+//     } catch (error) {
+//         console.error(`${new Date()} Error reading database length`);
+//     }
+// }
 
 async function main() {
     const GEMINI_API = process.env.GEMINI_API_KEY;
-    const prompt = `Introduce 3-4 natural mistakes into the following sentences for model training.
-        Format:
-        Provide the output as an array.
-        Include a period at the end of each original sentence.
-        Ensure that each altered sentence contains more than 3 mistakes.
-        types of mistakes you must write (all):
-        Verb tense errors
-        Subject-verb agreement
-        Phrasal verb errors
-        Article misuse (A/An/The)
-        Preposition errors
-        Word order (syntax errors)
-        Pluralization mistakes
-        Double negatives
-        Wrong word usage
-        Punctuation errors
-        Capitalization errors
-        
-        it is advisable to change to wrong order of some words/phrases and put wrong endings for phrasal verbs
-        Example format:
-            "{Original sentence1}.";"{Altered sentence1 with mistakes.}";"{Original sentence2}.";"{Altered sentence2 with mistakes.}";...";
-
-
-        Make sure this structure is followed for every! input sentence. write in plain text format. mandatory! make at least 3! errors! in each and every sentence!\n`;
+    const prompts = [
+        "Make the following request with the all 20 sentences.  Make 3-4 natural mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 3-4 spelling mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 3-4 grammatical mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 2-3 spelling mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 2-3 grammatical mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 5-6 grammatical mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 4-5 natural mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 4-5 spelling mistakes into the following 20 sentences for model training. .",
+        "Make the following request with the all 20 sentences.  Make 4-5 grammatical mistakes into the following 20 sentences for model training. ."
+      ];
     const bookFiles = fs
         .readdirSync("./books")
         .filter((file) => file.endsWith(".txt"))
@@ -160,14 +157,18 @@ async function main() {
         }
         const bookPath = `./books/${bookName}`;
 
-        const batchSize = 100;
+        const batchSize = 20; //number of sentences in prompt
         const sentences = parseTextFiles([bookPath], lastProcessedSentence);
         const totalSentences = sentences.length;
         for (let j = 0; j < totalSentences; j += batchSize) {
             const batch = sentences.slice(j, j + batchSize);
+
+            const randomPrompt = prompts[Math.floor(Math.random() * prompts.length)];
+
             let result;
             try {
-                result = await make_errors(GEMINI_API, prompt, batch);
+                result = await make_errors(GEMINI_API, randomPrompt, batch); /////////
+                
             } catch (error) {
                 console.error(
                     `${new Date()} Error generating errors with Google AI`
@@ -184,7 +185,7 @@ async function main() {
                 `Processed ${Math.min(
                     j + batchSize,
                     totalSentences
-                )} out of ${totalSentences} sentences in ${bookName}`
+                )} out of ${totalSentences} sentences in Book ${bookId + 1} of ${bookFiles.length}: ${bookName}`
             );
         }
         lastProcessedSentence = 0;
