@@ -2,3 +2,6 @@ node_modules/
 books/
 sentences.db
 .env
+bot/.env
+bot/bot_messages.db
+bot/__pycache__/
