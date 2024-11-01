@@ -1,9 +1,12 @@
+import os
+from dotenv import load_dotenv
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 from database import Session, Message
 import logging
 from telegram import Update
-token = ''  # your token
 
+load_dotenv()
+token = os.getenv('TELEGRAM_TOKEN')  # your token here
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -12,7 +15,7 @@ logging.basicConfig(
 
 
 async def start(update: Update, context):
-    await update.message.reply_text("Привет! Отправь мне текст, и я его обработаю.")
+    await update.message.reply_text("Hi. Send me a text and I'll process it.")
 
 
 async def handle_message(update: Update, context):
@@ -33,17 +36,16 @@ async def handle_message(update: Update, context):
         session.commit()
         session.close()
     except Exception as e:
-        logging.error(f"Ошибка при сохранении сообщения: {e}")
-        await update.message.reply_text("Произошла ошибка при сохранении сообщения.")
+        logging.error(f"Error when saving a message: {e}")
+        await update.message.reply_text("There was an error when saving the message.")
     finally:
         if session:
             session.close()
-    await update.message.reply_text(f"Ты отправил: {user_text}")
+    await update.message.reply_text(f"You sent it: {user_text}")
 
 
 def main():
-    app = ApplicationBuilder().token(
-        '7296138961:AAF9Ns7hCmSPRDQgqQezufcP0xSZpXQLaeg').build()
+    app = ApplicationBuilder().token(token).build()
 
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(
