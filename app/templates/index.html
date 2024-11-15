@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grammar Fix Bot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .chat-container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 400px;
+            max-width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .chat-header {
+            background-color: #007bff;
+            color: #fff;
+            padding: 10px;
+            border-radius: 10px 10px 0 0;
+            text-align: center;
+        }
+        .chat-form {
+            display: flex;
+            flex-direction: column;
+            margin-top: 20px;
+        }
+        .chat-form label {
+            margin-bottom: 10px;
+        }
+        .chat-form textarea {
+            resize: none;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .chat-form button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .chat-form button:hover {
+            background-color: #0056b3;
+        }
+        .chat-output {
+            margin-top: 20px;
+        }
+        .chat-output h2 {
+            margin-bottom: 10px;
+        }
+        .chat-output p {
+            background-color: #f1f1f1;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>Grammar Correction Bot</h1>
+        </div>
+        <form id="correctionForm" class="chat-form">
+            <label for="sentence">Enter a sentence with an error:</label>
+            <textarea id="sentence" name="sentence" rows="4" cols="50"></textarea>
+            <button type="button" onclick="sendSentence()">Correct Sentence</button>
+        </form>
+        <div class="chat-output">
+            <h2>Corrected Sentence:</h2>
+            <p id="output"></p>
+        </div>
+    </div>
+    <script>
+        async function sendSentence() {
+            const sentence = document.getElementById("sentence").value;
+            const response = await fetch('/correct', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ sentence: sentence })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                document.getElementById("output").textContent = data.corrected_sentence;
+            } else {
+                document.getElementById("output").textContent = data.error;
+            }
+        }
+    </script>
+</body>
+</html>
