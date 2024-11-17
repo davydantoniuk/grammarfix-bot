@@ -4,8 +4,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from database import Session, Message
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from happytransformer import HappyTextToText, TTSettings
-import tf_keras
+from transformers import pipeline
+# from happytransformer import HappyTextToText, TTSettings
+# import tf_keras
 
 load_dotenv()
 token = os.getenv('TELEGRAM_TOKEN')  # your token here
@@ -15,12 +16,25 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Initialize the HappyTextToText model from the local directory
+# grammar-synthesis-small
+# corrector = pipeline(
+#               'text2text-generation',
+#               'pszemraj/grammar-synthesis-small',
+#               )
 model_path = os.path.join(os.path.dirname(
-    os.path.abspath(__file__)), os.pardir, "t5-base-grammar-correction/")
-happy_tt = HappyTextToText("T5", model_path)
+    os.path.abspath(__file__)), os.pardir, "models/grammar-synthesis-small/")
+corrector = pipeline(
+    'text2text-generation',
+    model_path,
+)
+# t5-base-grammar-correction
 # happy_tt = HappyTextToText("T5", "vennify/t5-base-grammar-correction")
-args = TTSettings(num_beams=5, min_length=1)
+# args = TTSettings(num_beams=5, min_length=1)
+
+# model_path = os.path.join(os.path.dirname(
+#     os.path.abspath(__file__)), os.pardir, "models/t5-base-grammar-correction/")
+# happy_tt = HappyTextToText("T5", model_path)
+# args = TTSettings(num_beams=5, min_length=1)
 
 
 async def start(update: Update, context):
@@ -34,9 +48,9 @@ async def handle_message(update: Update, context):
     user_text = update.message.text
 
     try:
-        # Correct the user's input text using the local model
-        corrected_text = happy_tt.generate_text(
-            f"grammar: {user_text}", args=args).text
+        # corrected_text = happy_tt.generate_text(
+        #     f"grammar: {user_text}", args=args).text
+        corrected_text = corrector(user_text)[0]['generated_text']
 
         session = Session()
         message = Message(
